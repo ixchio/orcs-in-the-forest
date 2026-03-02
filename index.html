@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orcs In The Forest</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: monospace;
+      background: #000;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    :root {
+      --hud-bg: rgba(14, 20, 28, 0.55);
+      --hud-border: rgba(120, 200, 255, 0.55);
+      --hud-glow: 0 0 18px rgba(80, 180, 255, 0.35);
+      --accent: #34d399;
+      /* green */
+      --accent2: #60a5fa;
+      /* blue */
+      --text: #e8f0ff;
+      --muted: rgba(200, 230, 255, 0.65);
+    }
+
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      color: white;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 0;
+      height: 0;
+    }
+
+    .crosshair-arm {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+    }
+
+    .arm-h {
+      height: 2px;
+    }
+
+    .arm-v {
+      width: 2px;
+    }
+
+    /* Hitmarker (X) */
+    .hit-arm {
+      position: absolute;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+      opacity: 0;
+      /* driven by JS */
+      transform-origin: 50% 50%;
+    }
+
+    /* HUD Cards */
+    .hud-card {
+      position: absolute;
+      padding: 12px 14px;
+      background: var(--hud-bg);
+      border: 1px solid var(--hud-border);
+      border-radius: 10px;
+      box-shadow: var(--hud-glow);
+      backdrop-filter: blur(6px);
+      color: var(--text);
+      pointer-events: none;
+    }
+
+    .hud-title {
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .hud-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .tl {
+      top: 18px;
+      left: 20px;
+    }
+
+    .tr {
+      top: 18px;
+      right: 20px;
+    }
+
+    .bl {
+      bottom: 20px;
+      left: 20px;
+    }
+
+    .br {
+      bottom: 20px;
+      right: 20px;
+    }
+
+    /* Health gauge (modern white-on-white) */
+    #ui-health {
+      width: 360px;
+      padding: 14px 16px;
+      /* remove container visuals for a cleaner look */
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+
+    #health-bar {
+      position: relative;
+      width: 100%;
+      height: 18px;
+      /* subtle track in white tones */
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.10));
+      border: none;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.06);
+    }
+
+    #health-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 60%;
+      /* white fill with soft sheen */
+      background: linear-gradient(90deg, #ffffff, #f3f6fb);
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+      transition: width 140ms ease-out;
+    }
+
+    #health-stripes {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(45deg,
+          rgba(255, 255, 255, 0.18) 0,
+          rgba(255, 255, 255, 0.18) 6px,
+          transparent 6px,
+          transparent 12px);
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    #health-text {
+      font-size: 16px;
+      color: #ffffff;
+      text-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+    }
+
+    #health-label {
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    #health-label .hud-title {
+      margin: 0;
+    }
+
+    /* Ammo */
+    #ui-ammo {
+      min-width: 220px;
+      text-align: right;
+    }
+
+    #ammo {
+      font-size: 32px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: none;
+    }
+
+    #ammo:before {
+      content: 'AMMO';
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+      margin-bottom: 6px;
+      text-align: right;
+    }
+
+    /* Score */
+    #ui-score {
+      min-width: 160px;
+    }
+
+    #score:before {
+      content: 'SCORE';
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+      margin-bottom: 6px;
+    }
+
+    #score {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    /* Make score, ammo, and top-right containers match health (no chrome) */
+    #ui-score,
+    #ui-ammo,
+    #ui-topright {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+
+    /* Top-right stats */
+    #ui-topright {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .mini-card {
+      padding: 0;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      text-align: right;
+    }
+
+    .mini-card .label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+      margin-bottom: 2px;
+    }
+
+    .mini-card .value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.7);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    #overlay-content {
+      text-align: center;
+      color: white;
+      font-size: 24px;
+    }
+
+    #overlay-content h1 {
+      margin: 20px 0;
+    }
+
+    #overlay-content p {
+      margin: 10px 0;
+      font-size: 18px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    #wave-banner {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: #ff0;
+      text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.9);
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+
+    #wave-banner.show {
+      opacity: 1;
+    }
+
+    #damage-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, rgba(255, 0, 0, 0.0) 40%, rgba(255, 0, 0, 0.35) 80%, rgba(255, 0, 0, 0.7) 100%);
+      opacity: 0;
+    }
+
+    #heal-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, rgba(0, 255, 128, 0.0) 40%, rgba(0, 255, 128, 0.28) 80%, rgba(0, 255, 128, 0.55) 100%);
+      opacity: 0;
+    }
+  </style>
+  <style>
+    /* Powerup chips next to health */
+    .powerup-chips {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pu-chip {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 12px;
+      letter-spacing: 1px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
+      pointer-events: none;
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pu-chip .pu-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0%;
+      border-radius: 999px;
+      filter: saturate(1.1);
+    }
+
+    .pu-chip .pu-text {
+      position: relative;
+      z-index: 1;
+    }
+
+    .pu-chip.blink {
+      animation: puBlink 0.6s linear infinite;
+    }
+
+    @keyframes puBlink {
+      0% {
+        opacity: 1;
+        filter: brightness(1);
+      }
+
+      50% {
+        opacity: 0.35;
+        filter: brightness(1.4);
+      }
+
+      100% {
+        opacity: 1;
+        filter: brightness(1);
+      }
+    }
+
+    /* Kill streak display */
+    #streak-display {
+      position: absolute;
+      top: 35%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #ffd700;
+      text-shadow: 0 0 20px rgba(255, 200, 0, 0.8), 0 0 60px rgba(255, 100, 0, 0.4);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: 30;
+    }
+
+    #streak-display.streak-pulse {
+      animation: streakPulse 0.25s ease-out;
+    }
+
+    @keyframes streakPulse {
+      0% {
+        transform: translateX(-50%) scale(1.4);
+      }
+
+      100% {
+        transform: translateX(-50%) scale(1);
+      }
+    }
+
+    /* Weather banner */
+    #weather-banner {
+      position: absolute;
+      top: 12%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: #fff;
+      text-shadow: 0 0 30px rgba(255, 100, 0, 0.6), 0 0 60px rgba(200, 50, 0, 0.3);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      z-index: 25;
+    }
+
+    /* Lightning flash overlay */
+    #lightning-flash {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.9);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.05s ease;
+      z-index: 100;
+    }
+
+    /* Boss health bar */
+    #boss-healthbar {
+      position: absolute;
+      top: 6%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 400px;
+      pointer-events: none;
+      display: none;
+      z-index: 20;
+    }
+
+    .boss-name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: #ff4444;
+      text-align: center;
+      text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+      margin-bottom: 4px;
+    }
+
+    .boss-bar-track {
+      height: 12px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 6px;
+      border: 1px solid rgba(255, 50, 50, 0.4);
+      overflow: hidden;
+    }
+
+    .boss-bar-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #ff2222, #ff6644);
+      border-radius: 6px;
+      transition: width 0.15s ease;
+    }
+
+    /* Death recap */
+    #death-recap {
+      display: none;
+      margin-top: 16px;
+      background: rgba(10, 15, 25, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px 24px;
+      min-width: 260px;
+    }
+
+    .recap-title {
+      font-size: 14px;
+      letter-spacing: 3px;
+      color: #ff6666;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .recap-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+
+    .recap-label {
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .recap-value {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .upgrade-strip {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .upgrade-strip-icon {
+      font-size: 16px;
+      cursor: default;
+    }
+
+    /* Upgrade picker overlay */
+    #upgrade-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: 1000;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    #upgrade-overlay.show {
+      opacity: 1;
+    }
+
+    .upgrade-title {
+      font-size: 22px;
+      letter-spacing: 4px;
+      color: #d4e0ff;
+      margin-bottom: 32px;
+      text-shadow: 0 0 20px rgba(100, 160, 255, 0.4);
+      font-weight: 600;
+    }
+
+    .upgrade-cards {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .upgrade-card {
+      width: 200px;
+      padding: 28px 20px 22px;
+      background: rgba(20, 30, 48, 0.7);
+      border: 1px solid rgba(120, 180, 255, 0.25);
+      border-radius: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.22s ease;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .upgrade-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(100, 180, 255, 0.08), transparent 60%);
+      pointer-events: none;
+    }
+
+    .upgrade-card:hover {
+      transform: translateY(-6px) scale(1.03);
+      border-color: rgba(120, 200, 255, 0.6);
+      box-shadow: 0 8px 40px rgba(80, 160, 255, 0.3), 0 0 60px rgba(80, 160, 255, 0.1);
+      background: rgba(25, 40, 65, 0.85);
+    }
+
+    .upgrade-card:active {
+      transform: translateY(-2px) scale(0.98);
+    }
+
+    .upgrade-icon {
+      font-size: 42px;
+      margin-bottom: 14px;
+      filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.3));
+    }
+
+    .upgrade-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .upgrade-desc {
+      font-size: 13px;
+      color: rgba(200, 220, 255, 0.75);
+      line-height: 1.4;
+      margin-bottom: 14px;
+    }
+
+    .upgrade-stacks {
+      display: flex;
+      gap: 5px;
+      justify-content: center;
+    }
+
+    .stack-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      transition: background 0.2s;
+    }
+
+    .stack-dot.filled {
+      background: #60a5fa;
+      border-color: #93c5fd;
+      box-shadow: 0 0 6px rgba(96, 165, 250, 0.5);
+    }
+
+    /* Active upgrades strip under health */
+    .upgrade-strip {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .upgrade-strip-icon {
+      font-size: 16px;
+      filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
+      user-select: none;
+    }
+
+    /* Weapon indicator bottom-right */
+    #weapon-name {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1.5px;
+      text-align: right;
+      margin-bottom: 4px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="hud">
+    <!-- Score Top-Left -->
+    <div id="ui-score" class="hud-card tl">
+      <div class="hud-value" id="score">0</div>
+    </div>
+
+    <!-- Wave + Enemies + Grenades + FPS Top-Right (single row) -->
+    <div id="ui-topright" class="hud-card tr">
+      <div class="mini-card">
+        <div class="label">WAVE</div>
+        <div class="value" id="wave">1</div>
+      </div>
+      <div class="mini-card">
+        <div class="label">ENEMIES</div>
+        <div class="value" id="enemies">0</div>
+      </div>
+      <div class="mini-card">
+        <div class="label">GRENADES</div>
+        <div class="value" id="grenades">0</div>
+      </div>
+      <div class="mini-card">
+        <div class="label">FPS</div>
+        <div class="value" id="fps">-</div>
+      </div>
+    </div>
+
+    <!-- Health Bottom-Left -->
+    <div id="ui-health" class="hud-card bl">
+      <div id="powerup-chips" class="powerup-chips"></div>
+      <div id="health-label"><span class="hud-title">HEALTH</span><span id="health-text">100</span></div>
+      <div id="health-bar">
+        <div id="health-fill" style="width: 100%"></div>
+        <div id="health-stripes"></div>
+      </div>
+    </div>
+
+    <!-- Ammo Bottom-Right -->
+    <div id="ui-ammo" class="hud-card br">
+      <div id="weapon-name">RIFLE</div>
+      <div class="hud-value" id="ammo">0/∞</div>
+    </div>
+    <div id="crosshair">
+      <div id="ch-left" class="crosshair-arm arm-h"></div>
+      <div id="ch-right" class="crosshair-arm arm-h"></div>
+      <div id="ch-top" class="crosshair-arm arm-v"></div>
+      <div id="ch-bottom" class="crosshair-arm arm-v"></div>
+      <div id="ch-hit-a1" class="hit-arm"></div>
+      <div id="ch-hit-a2" class="hit-arm"></div>
+      <div id="ch-hit-b1" class="hit-arm"></div>
+      <div id="ch-hit-b2" class="hit-arm"></div>
+    </div>
+    <div id="wave-banner"></div>
+    <div id="heal-overlay"></div>
+    <div id="damage-overlay"></div>
+    <div id="streak-display"></div>
+    <div id="lightning-flash"></div>
+    <div id="boss-healthbar">
+      <div class="boss-name">MEGA GOLEM</div>
+      <div class="boss-bar-track">
+        <div class="boss-bar-fill" id="boss-fill"></div>
+      </div>
+    </div>
+  </div>
+  <div id="upgrade-overlay" class="hidden"></div>
+  <div id="overlay">
+    <div id="overlay-content">
+      <h1>Orcs In The Forest</h1>
+      <p>Click to Start</p>
+      <p style="font-size: 14px;">Move: WASD | Look: Mouse | Fire: Click | Reload: R | Grenade: Hold G then release |
+        Crouch: C | Light: F | Weapons: 1/2/3 | Pause: ESC</p>
+      <div id="death-recap"></div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+
+</html>
