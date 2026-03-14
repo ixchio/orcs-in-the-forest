@@ -61,7 +61,7 @@ function init() {
 
   // Player
   const startY = getTerrainHeight(0, 0) + (CFG.player.eyeHeight || 1.8);
-  G.player = {
+  window.__G = G; G.player = {
     pos: new THREE.Vector3(0, startY, 0),
     vel: new THREE.Vector3(),
     speed: CFG.player.speed,
