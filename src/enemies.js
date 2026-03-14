@@ -98,7 +98,7 @@ function updateOrc(enemy, delta, dist, onPlayerDeath) {
   // Contact DPS when very close
   if (dist < G.player.radius + enemy.radius) {
     const dmg = enemy.damagePerSecond * delta * 0.5;
-    G.player.health -= dmg;
+    console.log("DAMAGE FROM ENEMY CONTACT. enemy type: " + enemy.type + ", dist: " + dist); G.player.health -= dmg;
     G.damageFlash = Math.min(1, G.damageFlash + dmg * CFG.hud.damagePulsePerHP);
     if (G.player.health <= 0) {
       G.player.health = 0;
@@ -167,7 +167,7 @@ function updateShaman(enemy, delta, dist, onPlayerDeath) {
   // Contact DPS when very close
   if (dist < G.player.radius + enemy.radius) {
     const dmg = enemy.damagePerSecond * delta * 0.5;
-    G.player.health -= dmg;
+    console.log("DAMAGE FROM ENEMY CONTACT. enemy type: " + enemy.type + ", dist: " + dist); G.player.health -= dmg;
     G.damageFlash = Math.min(1, G.damageFlash + dmg * CFG.hud.damagePulsePerHP);
     if (G.player.health <= 0) {
       G.player.health = 0;
@@ -197,7 +197,7 @@ function updateWolf(enemy, delta, dist, onPlayerDeath) {
     enemy.biteTimer += delta;
     if (!enemy.biteApplied && enemy.biteTimer >= biteWindup && dist < biteRange + 0.2) {
       const dmg = CFG.wolf.biteDamage;
-      G.player.health -= dmg;
+      console.log("DAMAGE FROM ENEMY CONTACT. enemy type: " + enemy.type + ", dist: " + dist); G.player.health -= dmg;
       G.damageFlash = Math.min(1, G.damageFlash + (CFG.hud.damagePulsePerHit || 0.5) + dmg * (CFG.hud.damagePulsePerHP || 0.01));
       enemy.biteApplied = true;
       if (G.player.health <= 0) {
@@ -314,7 +314,7 @@ function updateGolem(enemy, delta, dist, onPlayerDeath) {
   // Contact DPS when very close
   if (dist < G.player.radius + enemy.radius) {
     const dmg = enemy.damagePerSecond * delta * 0.5;
-    G.player.health -= dmg;
+    console.log("DAMAGE FROM ENEMY CONTACT. enemy type: " + enemy.type + ", dist: " + dist); G.player.health -= dmg;
     G.damageFlash = Math.min(1, G.damageFlash + dmg * CFG.hud.damagePulsePerHP);
     if (G.player.health <= 0) {
       G.player.health = 0;
@@ -450,7 +450,7 @@ function updateMegaBoss(enemy, delta, dist, onPlayerDeath) {
   // Contact DPS
   if (dist < G.player.radius + enemy.radius) {
     const dmg = enemy.damagePerSecond * delta * 0.5;
-    G.player.health -= dmg;
+    console.log("DAMAGE FROM ENEMY CONTACT. enemy type: " + enemy.type + ", dist: " + dist); G.player.health -= dmg;
     G.damageFlash = Math.min(1, G.damageFlash + dmg * CFG.hud.damagePulsePerHP);
     if (G.player.health <= 0) {
       G.player.health = 0;
