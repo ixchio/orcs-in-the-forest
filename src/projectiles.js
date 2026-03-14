@@ -220,7 +220,7 @@ export function updateEnemyProjectiles(delta, onPlayerDeath) {
         p.kind === 'fireball' ? CFG.shaman.fireballDamage :
         CFG.golem?.rockDamage ?? 40
       );
-      G.player.health -= dmg;
+      console.log("DAMAGE FROM PROJECTILE. kind: " + p.kind + ", dist: " + p.pos.distanceTo(G.player.pos)); G.player.health -= dmg;
       G.damageFlash = Math.min(1, G.damageFlash + CFG.hud.damagePulsePerHit + dmg * CFG.hud.damagePulsePerHP);
       if (G.player.health <= 0 && G.player.alive) {
         G.player.health = 0;
