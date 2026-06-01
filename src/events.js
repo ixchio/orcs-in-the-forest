@@ -4,6 +4,8 @@ import { showOverlay } from './hud.js';
 import { initAudio, resumeAudio } from './audio.js';
 import { primeGrenade, releaseGrenade } from './grenades.js';
 import { switchWeapon } from './weapon.js';
+import { performMelee } from './melee.js';
+import { toggleSettings } from './juice.js';
 
 export function setupEvents({ startGame, restartGame, beginReload, updateWeaponAnchor }) {
   const overlay = document.getElementById('overlay');
@@ -85,6 +87,13 @@ export function setupEvents({ startGame, restartGame, beginReload, updateWeaponA
         break;
       case 'Digit3':
         if (G.state === 'playing') switchWeapon(2);
+        break;
+      case 'KeyV':
+        if (G.state === 'playing') performMelee();
+        break;
+      case 'Tab':
+        e.preventDefault();
+        if (G.state === 'paused' || G.state === 'menu') toggleSettings();
         break;
     }
   });

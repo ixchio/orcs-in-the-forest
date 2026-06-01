@@ -12,10 +12,14 @@ import { playGunshot, playHeadshot, playShotgunBlast, playSniperShot } from './a
 import { getVampiricHeal } from './upgrades.js';
 import { registerKill, getScoreMultiplier } from './killstreak.js';
 import { getWeatherScoreMult } from './weather.js';
+import { triggerShake, spawnDamageNumber, addKillFeedEntry } from './juice.js';
+import { playFleshHit, playMetalHit, playWoodHit, playDryFire, playEnemyDeath } from './sfx.js';
 
 // Helper to get the active weapon's config
 function activeWeaponConfig() {
-  return G.activeWeaponSlot === 1 ? CFG.shotgun : CFG.gun;
+  if (G.activeWeaponSlot === 2) return CFG.sniper;
+  if (G.activeWeaponSlot === 1) return CFG.shotgun;
+  return CFG.gun;
 }
 
 // Reusable temps to reduce GC
@@ -38,6 +42,7 @@ export function performShooting(delta) {
     if (!infinite && G.weapon.ammo <= 0) {
       G.shootCooldown = 0.2;
       G.weapon.recoil += wCfg.recoilKick * 0.25;
+      playDryFire();
       return;
     }
 
@@ -157,10 +162,20 @@ export function performShooting(delta) {
           enemy.hp -= dmg;
           G.stats.damageDealt += dmg;
 
+          // Damage number + hit sound
+          spawnDamageNumber(firstHit.point, dmg, isHead);
+          if (zone === 'head' && enemy.helmetAttached) playMetalHit();
+          else playFleshHit();
+
           if (isHead) {
             playHeadshot();
             G.stats.headshots++;
           }
+
+          // Knockback
+          const knockDir = new THREE.Vector3().subVectors(enemy.pos, G.player.pos);
+          knockDir.y = 0; knockDir.normalize();
+          enemy.pos.addScaledVector(knockDir, 0.3);
 
           if (isHead && enemy.helmetAttached) {
             const shotDir = new THREE.Vector3();
@@ -176,18 +191,19 @@ export function performShooting(delta) {
             G.player.score += (isHead ? 15 : 10) * scoreMult;
             G.stats.kills++;
             registerKill();
-            // Vampiric Rounds heal
+            addKillFeedEntry(enemy.type, isHead);
+            playEnemyDeath();
+            triggerShake(0.15, 12);
+
             const vHeal = getVampiricHeal();
             if (vHeal > 0) {
               G.player.health = Math.min(CFG.player.health, G.player.health + vHeal);
               G.healFlash = Math.min(1, G.healFlash + 0.25);
             }
             if (enemy.type === 'golem') {
-              const cnt = 15 + Math.floor(G.random() * 6);
-              spawnHealthOrbs(enemy.pos, cnt);
+              spawnHealthOrbs(enemy.pos, 15 + Math.floor(G.random() * 6));
             } else {
-              const cnt = 1 + Math.floor(G.random() * 5);
-              spawnHealthOrbs(enemy.pos, cnt);
+              spawnHealthOrbs(enemy.pos, 1 + Math.floor(G.random() * 5));
             }
           }
         } else if (firstHit.object !== G.ground) {
@@ -198,6 +214,7 @@ export function performShooting(delta) {
         }
       } else if (firstHit && !firstHit.object) {
         spawnImpact(firstHit.point, UP);
+        playWoodHit();
       }
 
       spawnTracer(TMPv1, end);
