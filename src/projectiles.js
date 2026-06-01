@@ -3,6 +3,7 @@ import { CFG } from './config.js';
 import { G } from './globals.js';
 import { getTerrainHeight, getNearbyTrees } from './world.js';
 import { spawnImpact, spawnMuzzleFlashAt } from './fx.js';
+import { showDamageDirection, triggerShake } from './juice.js';
 
 // Shared arrow geometry/material to avoid per-shot allocations
 const ARROW = (() => {
@@ -220,8 +221,10 @@ export function updateEnemyProjectiles(delta, onPlayerDeath) {
         p.kind === 'fireball' ? CFG.shaman.fireballDamage :
         CFG.golem?.rockDamage ?? 40
       );
-      console.log("DAMAGE FROM PROJECTILE. kind: " + p.kind + ", dist: " + p.pos.distanceTo(G.player.pos)); G.player.health -= dmg;
+      G.player.health -= dmg;
       G.damageFlash = Math.min(1, G.damageFlash + CFG.hud.damagePulsePerHit + dmg * CFG.hud.damagePulsePerHP);
+      showDamageDirection(p.pos);
+      triggerShake(0.2 + dmg * 0.005, 10);
       if (G.player.health <= 0 && G.player.alive) {
         G.player.health = 0;
         G.player.alive = false;

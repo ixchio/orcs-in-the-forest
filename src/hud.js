@@ -181,7 +181,7 @@ export function showWaveBanner(text) {
   setTimeout(() => banner.classList.remove('show'), 2000);
 }
 
-export function showOverlay(type) {
+export function showOverlay(type, scores = null) {
   const overlay = document.getElementById('overlay');
   const content = document.getElementById('overlay-content');
   if (!overlay || !content) return;
@@ -190,15 +190,18 @@ export function showOverlay(type) {
 
   if (type === 'paused') {
     content.innerHTML = `
-      <h1>Paused</h1>
-      <p>Click to Resume</p>
+      <div class="pause-title">PAUSED</div>
+      <p class="start-prompt">CLICK TO RESUME</p>
+      <p style="font-size:12px;color:rgba(255,255,255,0.35);margin-top:12px;letter-spacing:1px;">Press TAB for Settings</p>
     `;
   } else if (type === 'gameover') {
+    const newBestHtml = scores?.newBest ? '<div style="color:#fbbf24;font-size:14px;letter-spacing:3px;margin-top:8px;">★ NEW PERSONAL BEST ★</div>' : '';
     content.innerHTML = `
-      <h1>You Died</h1>
-      <p>Score: ${G.player.score}</p>
-      <p>Wave: ${G.waves.current}</p>
-      <p>Click to Restart</p>
+      <div class="death-title">YOU DIED</div>
+      <div class="death-score">Score: <span>${Math.round(G.player.score)}</span> · Wave: <span>${G.waves.current}</span></div>
+      ${newBestHtml}
+      <p class="start-prompt" style="margin-top:24px;">CLICK TO RESTART</p>
+      <div id="death-recap"></div>
     `;
   }
 }

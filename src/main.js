@@ -27,20 +27,33 @@ import { updateKillStreak, resetStreak } from './killstreak.js';
 import { updateWeather, endWeather } from './weather.js';
 import { updateFallingTrees } from './world.js';
 import { showDeathRecap, hideDeathRecap } from './hud.js';
+import { updateShake, checkAchievements, updateLowHealthWarning, updateDamageDirection, showBestScores, updateHighScores, hideLoadingScreen, updateLoadingProgress, initSettings } from './juice.js';
+import { updateFootsteps, updateHeartbeat } from './sfx.js';
 
-init();
-animate();
+updateLoadingProgress(10);
+try {
+  init();
+  updateLoadingProgress(90);
+  hideLoadingScreen();
+  animate();
+} catch (e) {
+  console.error('Init failed:', e);
+  const tip = document.querySelector('.loading-tip');
+  if (tip) tip.textContent = 'Error: ' + e.message;
+  hideLoadingScreen();
+}
 
 function init() {
   // Renderer
   G.renderer = new THREE.WebGLRenderer({ antialias: true });
   G.renderer.setSize(window.innerWidth, window.innerHeight);
-  // Lower pixel ratio cap for significant fill-rate savings
-  G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0));
+  G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   G.renderer.shadowMap.enabled = true;
-  // Use the cheapest shadow filter for CPU savings
-  G.renderer.shadowMap.type = THREE.BasicShadowMap;
-  document.body.appendChild(G.renderer.domElement);
+  G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  G.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  G.renderer.toneMappingExposure = 1.0;
+  const container = document.getElementById('game-container') || document.body;
+  container.insertBefore(G.renderer.domElement, container.firstChild);
 
   // Scene
   G.scene = new THREE.Scene();
@@ -61,7 +74,7 @@ function init() {
 
   // Player
   const startY = getTerrainHeight(0, 0) + (CFG.player.eyeHeight || 1.8);
-  window.__G = G; G.player = {
+  G.player = {
     pos: new THREE.Vector3(0, startY, 0),
     vel: new THREE.Vector3(),
     speed: CFG.player.speed,
@@ -109,7 +122,9 @@ function init() {
     updateWeaponAnchor
   });
 
-  setupFoliageDebugPanel();
+  // Initialize settings and show high scores on menu
+  initSettings();
+  showBestScores();
 
   // Pre-warm shaders to avoid first-frame hitches
   if (G.renderer && G.scene && G.camera) {
@@ -117,297 +132,6 @@ function init() {
   }
 }
 
-function setupFoliageDebugPanel() {
-  if (typeof window === 'undefined') return;
-  if (window.__foliageDebugReady) return;
-  window.__foliageDebugReady = true;
-
-  const grassDefaults = {
-    densityMult: 6.0,
-    baseYOffset: -0.01,
-    randomTilt: 0.10,
-    bladeBaseWidth: 0.07,
-    bladeBaseHeight: 0.62,
-    bladeMinScale: 0.95,
-    bladeMaxScale: 1.45,
-    rootWidth: 0.65,
-    tipWidth: 0.10,
-    bendBase: 0.16,
-    bendWindMult: 0.55,
-    leanJitter: 0.22,
-    swayPushX: 0.28,
-    swayPushZ: 0.22,
-    tipNoiseBase: 0.02,
-    tipNoiseMult: 0.03,
-    phaseScaleX: 0.047,
-    phaseScaleZ: 0.041,
-    gustFreqA: 1.6,
-    gustFreqB: 0.85,
-    gustAmpA: 0.65,
-    gustAmpB: 0.35,
-    hueMin: 0.26,
-    hueMax: 0.34,
-    satMin: 0.46,
-    satMax: 0.72,
-    lightMin: 0.26,
-    lightMax: 0.42
-  };
-
-  const normalizeGrassConfig = () => {
-    if (!CFG.foliage.grass || typeof CFG.foliage.grass !== 'object') CFG.foliage.grass = {};
-    const g = CFG.foliage.grass;
-    for (const [k, v] of Object.entries(grassDefaults)) {
-      if (g[k] == null || !Number.isFinite(Number(g[k]))) g[k] = v;
-      else g[k] = Number(g[k]);
-    }
-    if (g.densityMult == null) g.densityMult = CFG.foliage.grassDensityMult ?? grassDefaults.densityMult;
-    CFG.foliage.grassDensityMult = Number(g.densityMult);
-    return g;
-  };
-  normalizeGrassConfig();
-
-  const sliderDefs = [
-    { group: 'Distribution', id: 'chunkSize', label: 'Chunk Size', min: 12, max: 64, step: 1, get: () => CFG.foliage.chunkSize, set: (v) => { CFG.foliage.chunkSize = Math.round(v); }, fmt: (v) => `${Math.round(v)}` },
-    { group: 'Distribution', id: 'densityNearClear', label: 'Density Near Clear', min: 0, max: 1, step: 0.01, get: () => CFG.foliage.densityNearClear, set: (v) => { CFG.foliage.densityNearClear = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Distribution', id: 'grassPerChunk', label: 'Grass Base/Chunk', min: 60, max: 2200, step: 5, get: () => CFG.foliage.grassPerChunk, set: (v) => { CFG.foliage.grassPerChunk = Math.round(v); }, fmt: (v) => `${Math.round(v)}` },
-    { group: 'Distribution', id: 'densityMult', label: 'Grass Density Mult', min: 0.5, max: 12, step: 0.1, get: () => normalizeGrassConfig().densityMult, set: (v) => { const g = normalizeGrassConfig(); g.densityMult = Number(v); CFG.foliage.grassDensityMult = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Distribution', id: 'grassViewDist', label: 'Grass View Dist', min: 30, max: 220, step: 1, get: () => CFG.foliage.grassViewDist, set: (v) => { CFG.foliage.grassViewDist = Number(v); }, fmt: (v) => `${Math.round(v)}` },
-    { group: 'Distribution', id: 'windStrength', label: 'Wind Strength', min: 0, max: 1.5, step: 0.01, get: () => CFG.foliage.windStrength, set: (v) => { CFG.foliage.windStrength = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-
-    { group: 'Blade Shape', id: 'bladeBaseWidth', label: 'Blade Base Width', min: 0.03, max: 0.4, step: 0.001, get: () => normalizeGrassConfig().bladeBaseWidth, set: (v) => { normalizeGrassConfig().bladeBaseWidth = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Blade Shape', id: 'bladeBaseHeight', label: 'Blade Base Height', min: 0.15, max: 1.6, step: 0.01, get: () => normalizeGrassConfig().bladeBaseHeight, set: (v) => { normalizeGrassConfig().bladeBaseHeight = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Blade Shape', id: 'bladeMinScale', label: 'Blade Min Scale', min: 0.2, max: 3.0, step: 0.01, get: () => normalizeGrassConfig().bladeMinScale, set: (v) => { normalizeGrassConfig().bladeMinScale = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Blade Shape', id: 'bladeMaxScale', label: 'Blade Max Scale', min: 0.25, max: 3.2, step: 0.01, get: () => normalizeGrassConfig().bladeMaxScale, set: (v) => { normalizeGrassConfig().bladeMaxScale = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Blade Shape', id: 'rootWidth', label: 'Root Width', min: 0.1, max: 1.6, step: 0.01, get: () => normalizeGrassConfig().rootWidth, set: (v) => { normalizeGrassConfig().rootWidth = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Blade Shape', id: 'tipWidth', label: 'Tip Width', min: 0.01, max: 0.8, step: 0.01, get: () => normalizeGrassConfig().tipWidth, set: (v) => { normalizeGrassConfig().tipWidth = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Blade Shape', id: 'baseYOffset', label: 'Base Y Offset', min: -0.2, max: 0.2, step: 0.001, get: () => normalizeGrassConfig().baseYOffset, set: (v) => { normalizeGrassConfig().baseYOffset = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Blade Shape', id: 'randomTilt', label: 'Random Tilt', min: 0, max: 0.35, step: 0.005, get: () => normalizeGrassConfig().randomTilt, set: (v) => { normalizeGrassConfig().randomTilt = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-
-    { group: 'Motion', id: 'bendBase', label: 'Bend Base', min: 0, max: 1.5, step: 0.01, get: () => normalizeGrassConfig().bendBase, set: (v) => { normalizeGrassConfig().bendBase = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'bendWindMult', label: 'Bend Wind Mult', min: 0, max: 2.0, step: 0.01, get: () => normalizeGrassConfig().bendWindMult, set: (v) => { normalizeGrassConfig().bendWindMult = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'leanJitter', label: 'Lean Jitter', min: 0, max: 1.0, step: 0.01, get: () => normalizeGrassConfig().leanJitter, set: (v) => { normalizeGrassConfig().leanJitter = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'swayPushX', label: 'Sway Push X', min: 0, max: 1.2, step: 0.01, get: () => normalizeGrassConfig().swayPushX, set: (v) => { normalizeGrassConfig().swayPushX = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'swayPushZ', label: 'Sway Push Z', min: 0, max: 1.2, step: 0.01, get: () => normalizeGrassConfig().swayPushZ, set: (v) => { normalizeGrassConfig().swayPushZ = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'tipNoiseBase', label: 'Tip Noise Base', min: 0, max: 0.3, step: 0.005, get: () => normalizeGrassConfig().tipNoiseBase, set: (v) => { normalizeGrassConfig().tipNoiseBase = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Motion', id: 'tipNoiseMult', label: 'Tip Noise Mult', min: 0, max: 0.4, step: 0.005, get: () => normalizeGrassConfig().tipNoiseMult, set: (v) => { normalizeGrassConfig().tipNoiseMult = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Motion', id: 'phaseScaleX', label: 'Phase Scale X', min: 0.001, max: 0.25, step: 0.001, get: () => normalizeGrassConfig().phaseScaleX, set: (v) => { normalizeGrassConfig().phaseScaleX = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Motion', id: 'phaseScaleZ', label: 'Phase Scale Z', min: 0.001, max: 0.25, step: 0.001, get: () => normalizeGrassConfig().phaseScaleZ, set: (v) => { normalizeGrassConfig().phaseScaleZ = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Motion', id: 'gustFreqA', label: 'Gust Freq A', min: 0.1, max: 6.0, step: 0.01, get: () => normalizeGrassConfig().gustFreqA, set: (v) => { normalizeGrassConfig().gustFreqA = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'gustFreqB', label: 'Gust Freq B', min: 0.1, max: 6.0, step: 0.01, get: () => normalizeGrassConfig().gustFreqB, set: (v) => { normalizeGrassConfig().gustFreqB = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'gustAmpA', label: 'Gust Amp A', min: 0, max: 2.0, step: 0.01, get: () => normalizeGrassConfig().gustAmpA, set: (v) => { normalizeGrassConfig().gustAmpA = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-    { group: 'Motion', id: 'gustAmpB', label: 'Gust Amp B', min: 0, max: 2.0, step: 0.01, get: () => normalizeGrassConfig().gustAmpB, set: (v) => { normalizeGrassConfig().gustAmpB = Number(v); }, fmt: (v) => Number(v).toFixed(2) },
-
-    { group: 'Color', id: 'hueMin', label: 'Hue Min', min: 0.0, max: 1.0, step: 0.001, get: () => normalizeGrassConfig().hueMin, set: (v) => { normalizeGrassConfig().hueMin = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Color', id: 'hueMax', label: 'Hue Max', min: 0.0, max: 1.0, step: 0.001, get: () => normalizeGrassConfig().hueMax, set: (v) => { normalizeGrassConfig().hueMax = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Color', id: 'satMin', label: 'Saturation Min', min: 0.0, max: 1.0, step: 0.001, get: () => normalizeGrassConfig().satMin, set: (v) => { normalizeGrassConfig().satMin = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Color', id: 'satMax', label: 'Saturation Max', min: 0.0, max: 1.0, step: 0.001, get: () => normalizeGrassConfig().satMax, set: (v) => { normalizeGrassConfig().satMax = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Color', id: 'lightMin', label: 'Lightness Min', min: 0.0, max: 1.0, step: 0.001, get: () => normalizeGrassConfig().lightMin, set: (v) => { normalizeGrassConfig().lightMin = Number(v); }, fmt: (v) => Number(v).toFixed(3) },
-    { group: 'Color', id: 'lightMax', label: 'Lightness Max', min: 0.0, max: 1.0, step: 0.001, get: () => normalizeGrassConfig().lightMax, set: (v) => { normalizeGrassConfig().lightMax = Number(v); }, fmt: (v) => Number(v).toFixed(3) }
-  ];
-
-  let panel = null;
-  const controlEls = {};
-  let autoApply = true;
-  let applyTimer = null;
-
-  const applyAndRegen = () => {
-    normalizeGrassConfig();
-    CFG.foliage.grassDensityMult = Number(CFG.foliage.grass.densityMult);
-    generateGroundCover();
-    tickForest(G.clock ? G.clock.elapsedTime : 0);
-    refreshReadout();
-  };
-
-  const scheduleApply = () => {
-    if (!autoApply) return;
-    if (applyTimer) clearTimeout(applyTimer);
-    applyTimer = setTimeout(() => {
-      applyTimer = null;
-      applyAndRegen();
-    }, 120);
-  };
-
-  const snapshot = () => {
-    const g = normalizeGrassConfig();
-    return {
-      chunkSize: CFG.foliage.chunkSize,
-      densityNearClear: CFG.foliage.densityNearClear,
-      grassPerChunk: CFG.foliage.grassPerChunk,
-      grassViewDist: CFG.foliage.grassViewDist,
-      windStrength: CFG.foliage.windStrength,
-      grass: { ...g }
-    };
-  };
-
-  const syncInputsFromConfig = () => {
-    for (let i = 0; i < sliderDefs.length; i++) {
-      const def = sliderDefs[i];
-      const refs = controlEls[def.id];
-      if (!refs) continue;
-      refs.input.value = String(def.get());
-    }
-    refreshReadout();
-  };
-
-  const refreshReadout = () => {
-    for (let i = 0; i < sliderDefs.length; i++) {
-      const def = sliderDefs[i];
-      const refs = controlEls[def.id];
-      if (!refs) continue;
-      const val = def.get();
-      refs.value.textContent = def.fmt ? def.fmt(val) : String(val);
-    }
-  };
-
-  const applyOverrides = (overrides = {}) => {
-    if (!overrides || typeof overrides !== 'object') return;
-    const g = normalizeGrassConfig();
-    if (overrides.grass && typeof overrides.grass === 'object') {
-      for (const [k, v] of Object.entries(overrides.grass)) {
-        if (g[k] != null && Number.isFinite(Number(v))) g[k] = Number(v);
-      }
-    }
-    for (const [k, v] of Object.entries(overrides)) {
-      if (k === 'grass') continue;
-      if (!Number.isFinite(Number(v))) continue;
-      const n = Number(v);
-      if (k in CFG.foliage) {
-        CFG.foliage[k] = n;
-      } else if (k in g) {
-        g[k] = n;
-      }
-    }
-    CFG.foliage.grassDensityMult = Number(g.densityMult);
-  };
-
-  const ensurePanel = () => {
-    if (panel) return panel;
-    panel = document.createElement('div');
-    panel.id = 'grass-debug-panel';
-    panel.style.cssText = [
-      'position:fixed',
-      'top:16px',
-      'right:16px',
-      'z-index:99999',
-      'width:380px',
-      'padding:12px',
-      'border:1px solid rgba(140,220,255,0.7)',
-      'border-radius:10px',
-      'background:rgba(8,12,18,0.92)',
-      'color:#eaf6ff',
-      'font:12px/1.4 monospace',
-      'box-shadow:0 0 20px rgba(0,0,0,0.45)',
-      'backdrop-filter: blur(4px)',
-      'pointer-events:auto',
-      'display:none',
-      'max-height:78vh',
-      'overflow:auto'
-    ].join(';');
-
-    let rows = '';
-    let currentGroup = '';
-    for (let i = 0; i < sliderDefs.length; i++) {
-      const def = sliderDefs[i];
-      if (def.group !== currentGroup) {
-        currentGroup = def.group;
-        rows += `<div style="margin:10px 0 6px;color:#a7ddff;font-weight:700;letter-spacing:.7px;">${currentGroup}</div>`;
-      }
-      rows += `
-      <div style="margin-bottom:7px;" data-slider="${def.id}">
-        <label for="fd-${def.id}">${def.label}</label>
-        <input id="fd-${def.id}" type="range" min="${def.min}" max="${def.max}" step="${def.step}" style="width:100%;">
-        <div style="text-align:right;color:#9ed8ff;" id="fd-val-${def.id}"></div>
-      </div>`;
-    }
-
-    panel.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <strong style="font-size:13px;letter-spacing:.8px;">GRASS DEBUG</strong>
-        <button id="fd-close" style="background:#13202e;color:#fff;border:1px solid #345;padding:2px 8px;border-radius:6px;cursor:pointer;">X</button>
-      </div>
-      <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-        <input type="checkbox" id="fd-auto-apply" checked />
-        <span>Auto-apply while dragging</span>
-      </label>
-      ${rows}
-      <div style="display:flex;gap:8px;margin-top:10px;">
-        <button id="fd-apply" style="flex:1;background:#134d2e;color:#fff;border:1px solid #2a7;padding:6px 8px;border-radius:6px;cursor:pointer;">Apply + Rebuild</button>
-        <button id="fd-reset" style="flex:1;background:#4a2a1a;color:#fff;border:1px solid #8a5233;padding:6px 8px;border-radius:6px;cursor:pointer;">Reset Grass</button>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button id="fd-refresh" style="flex:1;background:#163447;color:#fff;border:1px solid #2a5678;padding:6px 8px;border-radius:6px;cursor:pointer;">Refresh From CFG</button>
-        <button id="fd-copy" style="flex:1;background:#20331a;color:#fff;border:1px solid #456335;padding:6px 8px;border-radius:6px;cursor:pointer;">Copy JSON</button>
-      </div>
-      <div style="margin-top:10px;color:#93a8bb;">
-        Console: <code>window.toggleGrassPanel()</code>
-      </div>
-    `;
-    document.body.appendChild(panel);
-
-    for (let i = 0; i < sliderDefs.length; i++) {
-      const def = sliderDefs[i];
-      const input = panel.querySelector(`#fd-${def.id}`);
-      const value = panel.querySelector(`#fd-val-${def.id}`);
-      controlEls[def.id] = { input, value };
-      input.addEventListener('input', () => {
-        def.set(Number(input.value));
-        refreshReadout();
-        scheduleApply();
-      });
-    }
-    syncInputsFromConfig();
-
-    const autoEl = panel.querySelector('#fd-auto-apply');
-    autoEl.addEventListener('change', () => { autoApply = !!autoEl.checked; });
-    panel.querySelector('#fd-close').addEventListener('click', () => { panel.style.display = 'none'; });
-    panel.querySelector('#fd-apply').addEventListener('click', applyAndRegen);
-    panel.querySelector('#fd-refresh').addEventListener('click', syncInputsFromConfig);
-    panel.querySelector('#fd-reset').addEventListener('click', () => {
-      CFG.foliage.grass = { ...grassDefaults };
-      CFG.foliage.grassDensityMult = grassDefaults.densityMult;
-      CFG.foliage.grassPerChunk = 1260;
-      CFG.foliage.grassViewDist = 95;
-      CFG.foliage.windStrength = 0.45;
-      CFG.foliage.chunkSize = 30;
-      CFG.foliage.densityNearClear = 0.45;
-      syncInputsFromConfig();
-      applyAndRegen();
-    });
-    panel.querySelector('#fd-copy').addEventListener('click', async () => {
-      const json = JSON.stringify(snapshot(), null, 2);
-      try {
-        await navigator.clipboard.writeText(json);
-      } catch (_) { }
-    });
-
-    return panel;
-  };
-
-  window.showGrassPanel = () => {
-    const p = ensurePanel();
-    p.style.display = 'block';
-  };
-  window.hideGrassPanel = () => {
-    if (panel) panel.style.display = 'none';
-  };
-  window.toggleGrassPanel = () => {
-    const p = ensurePanel();
-    p.style.display = p.style.display === 'none' ? 'block' : 'none';
-  };
-  window.applyGrassSettings = (overrides = {}) => {
-    applyOverrides(overrides);
-    syncInputsFromConfig();
-    applyAndRegen();
-    return snapshot();
-  };
-  window.getGrassSettings = () => snapshot();
-
-  // Backward-compatible aliases for earlier naming.
-  window.showFoliageDebugPanel = window.showGrassPanel;
-  window.hideFoliageDebugPanel = window.hideGrassPanel;
-  window.toggleFoliageDebugPanel = window.toggleGrassPanel;
-  window.applyFoliageDebugSettings = window.applyGrassSettings;
-}
 
 function startGame() {
   G.state = 'playing';
@@ -552,8 +276,9 @@ function restartGame() {
 function gameOver() {
   G.state = 'gameover';
   G.controls.unlock();
-  showOverlay('gameover');
-  // Gracefully fade out music and ambience
+  // Save high scores and show results
+  const scores = updateHighScores();
+  showOverlay('gameover', scores);
   stopMusic(0.6);
   stopAmbience(0.6);
   endWeather();
@@ -608,16 +333,28 @@ function animate() {
           bossFill.style.width = pct + '%';
         } else {
           bossBar.style.display = 'none';
+          G._bossesKilled = (G._bossesKilled || 0) + 1;
           G.activeBoss = null;
         }
       }
+    }
+
+    // New juice systems
+    updateLowHealthWarning();
+    updateDamageDirection(delta);
+    updateFootsteps(delta, G.input.w || G.input.a || G.input.s || G.input.d, G.input.sprint, G.input.crouch, G.player.grounded);
+    updateHeartbeat(delta);
+    checkAchievements();
+
+    // Melee attack
+    if (G.meleeTimer > 0) {
+      G.meleeTimer -= delta;
     }
   }
   updateDayNight(delta);
   updateFX(delta);
   updateHelmets(delta);
   updateCasings(delta);
-  // Update grenades and previews last among gameplay
   if (G.state === 'playing') {
     updateGrenades(delta);
     if (!G.player.alive) {
@@ -626,8 +363,8 @@ function animate() {
   }
   updateClouds(delta);
   updateMountains(delta);
-  // Update subtle foliage wind sway using elapsedTime (avoid double-advancing clock)
   tickForest(G.clock.elapsedTime);
+  updateShake(delta);
 
   G.renderer.render(G.scene, G.camera);
 
