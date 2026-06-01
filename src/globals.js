@@ -45,7 +45,7 @@ export const G = {
 
   // Weapon switching
   activeWeaponSlot: 0, // 0=rifle, 1=shotgun
-  weaponSlots: [null, null], // { group, muzzle, ejector, materials, ammo, reserve }
+  weaponSlots: [null, null, null], // { group, muzzle, ejector, materials, ammo, reserve }
   switching: false,
   switchTimer: 0,
 
@@ -139,6 +139,13 @@ export const G = {
   damageFlash: 0,
   healFlash: 0,
   hitFlash: 0,
+  // Melee
+  meleeTimer: 0,
+  meleeCooldown: 0.6,
+
+  // Settings (populated by juice.js)
+  settings: null,
+
   // Deferred GPU resource disposal queue to avoid frame spikes
   disposeQueue: [],
 

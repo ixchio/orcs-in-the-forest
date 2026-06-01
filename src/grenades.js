@@ -8,6 +8,8 @@ import { playExplosion } from './audio.js';
 import { spawnHealthOrbs } from './pickups.js';
 import { registerKill, getScoreMultiplier } from './killstreak.js';
 import { getWeatherScoreMult } from './weather.js';
+import { triggerShake, addKillFeedEntry } from './juice.js';
+import { playGrenadeBounce, playEnemyDeath } from './sfx.js';
 
 const TMPv = new THREE.Vector3();
 const FORWARD = new THREE.Vector3();
@@ -143,9 +145,9 @@ export function releaseGrenade() {
 }
 
 function explodeAt(position) {
-  // Visual + sound
   spawnExplosionAt(position, CFG.grenade.radius);
   playExplosion();
+  triggerShake(0.8, 6);
 
   // Damage enemies (simple radial falloff)
   for (let i = 0; i < G.enemies.length; i++) {
@@ -164,9 +166,10 @@ function explodeAt(position) {
         G.player.score += 10 * scoreMult;
         G.stats.kills++;
         registerKill();
-        // Heals: larger drop for golems
+        addKillFeedEntry(e.type, false);
+        playEnemyDeath();
         if (e.type === 'golem') {
-          spawnHealthOrbs(e.pos, 15 + Math.floor(G.random() * 6)); // 15..20
+          spawnHealthOrbs(e.pos, 15 + Math.floor(G.random() * 6));
         } else {
           spawnHealthOrbs(e.pos, 1 + Math.floor(G.random() * 3));
         }
@@ -286,7 +289,7 @@ export function updateGrenades(delta) {
     const ground = getTerrainHeight(g.pos.x, g.pos.z);
     if (g.pos.y <= ground) {
       g.pos.y = ground;
-      // Simple damp when on ground
+      if (!g.grounded) playGrenadeBounce();
       g.vel.set(0, 0, 0);
       g.grounded = true;
     }
